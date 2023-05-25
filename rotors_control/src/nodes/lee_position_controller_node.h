@@ -21,60 +21,130 @@
 #ifndef ROTORS_CONTROL_LEE_POSITION_CONTROLLER_NODE_H
 #define ROTORS_CONTROL_LEE_POSITION_CONTROLLER_NODE_H
 
-#include <boost/bind.hpp>
-#include <Eigen/Eigen>
-#include <stdio.h>
-
 #include <geometry_msgs/PoseStamped.h>
+#include <map/representations/OcTree.h>
 #include <mav_msgs/Actuators.h>
 #include <mav_msgs/AttitudeThrust.h>
 #include <mav_msgs/eigen_mav_msgs.h>
+#include <mrnav/DynamicObjectShapeState.h>
+#include <mrnav/Helpers.h>
+#include <mrnav/TeammateShapeState.h>
 #include <nav_msgs/Odometry.h>
+#include <octomap_msgs/Octomap.h>
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
+#include <rotors_control/common.h>
+#include <rotors_control/lee_position_controller.h>
+#include <stdio.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 
-#include "rotors_control/common.h"
-#include "rotors_control/lee_position_controller.h"
+#include <Eigen/Eigen>
+#include <boost/bind.hpp>
+#include <unordered_map>
 
 namespace rotors_control {
 
 class LeePositionControllerNode {
- public:
-  LeePositionControllerNode();
-  ~LeePositionControllerNode();
+   public:
+    LeePositionControllerNode();
+    ~LeePositionControllerNode();
 
-  void InitializeParams();
-  void Publish();
+    void InitializeParams();
+    void Publish();
 
- private:
+   private:
+    using OcTree = map::OcTree<double>;
+    using AlignedBox = math::AlignedBox<double, 3U>;
 
-  LeePositionController lee_position_controller_;
+    LeePositionController lee_position_controller_;
 
-  std::string namespace_;
+    std::string namespace_;
 
-  // subscribers
-  ros::Subscriber cmd_trajectory_sub_;
-  ros::Subscriber cmd_multi_dof_joint_trajectory_sub_;
-  ros::Subscriber cmd_pose_sub_;
-  ros::Subscriber odometry_sub_;
+    // subscribers
+    ros::Subscriber cmd_trajectory_sub_;
+    ros::Subscriber cmd_multi_dof_joint_trajectory_sub_;
+    ros::Subscriber cmd_pose_sub_;
+    ros::Subscriber odometry_sub_;
 
-  ros::Publisher motor_velocity_reference_pub_;
+    // Subscriber for teammate current shapes and states
+    ros::Subscriber teammate_shapes_and_states_sub_;
 
-  mav_msgs::EigenTrajectoryPointDeque commands_;
-  std::deque<ros::Duration> command_waiting_times_;
-  ros::Timer command_timer_;
+    // Maximum Linf acceleration for SBC. Used for teammates.
+    double sbc_maximum_Linf_acceleration_;
 
-  void TimedCommandCallback(const ros::TimerEvent& e);
+    // Radii of teammates
+    std::unordered_map<std::string, double> teammate_radii_;
 
-  void MultiDofJointTrajectoryCallback(
-      const trajectory_msgs::MultiDOFJointTrajectoryConstPtr& trajectory_reference_msg);
+    // Last known states of teammates
+    std::unordered_map<std::string, std::deque<mrnav::TimedState>>
+        teammate_state_sequences_;
 
-  void CommandPoseCallback(
-      const geometry_msgs::PoseStampedConstPtr& pose_msg);
+    // Static objects in the environment
+    std::shared_ptr<OcTree> static_objects_;
 
-  void OdometryCallback(const nav_msgs::OdometryConstPtr& odometry_msg);
+    // Sensing distance for static objects while avoiding them
+    double object_sensing_distance_;
+
+    // Minimum existence probability for static objects while considering them
+    // for avoidance
+    double static_objects_minimum_existence_probability_;
+
+    // Subscriber for static objects
+    ros::Subscriber static_objects_sub_;
+
+    // Dynamic object state sequences
+    std::unordered_map<std::string, std::deque<mrnav::TimedState>>
+        dynamic_object_state_sequences_;
+
+    // Dynamic object bounding boxes
+    std::unordered_map<std::string, AlignedBox> dynamic_object_bounding_boxes_;
+
+    // Subscriber for dynamic object shapes and states
+    ros::Subscriber dynamic_object_shapes_and_states_sub_;
+
+    ros::Publisher motor_velocity_reference_pub_;
+
+    mav_msgs::EigenTrajectoryPointDeque commands_;
+    std::deque<ros::Duration> command_waiting_times_;
+    ros::Timer command_timer_;
+
+    void TimedCommandCallback(const ros::TimerEvent& e);
+
+    void MultiDofJointTrajectoryCallback(
+        const trajectory_msgs::MultiDOFJointTrajectoryConstPtr&
+            trajectory_reference_msg);
+
+    void CommandPoseCallback(
+        const geometry_msgs::PoseStampedConstPtr& pose_msg);
+
+    void OdometryCallback(const nav_msgs::OdometryConstPtr& odometry_msg);
+
+    /**
+     * @brief Callback for teammate shapes and states
+     *
+     * @param teammate_shape_and_state Teammate shape and state message
+     */
+    void TeammateShapesAndStatesCallback(
+        const mrnav::TeammateShapeState::ConstPtr& teammate_shape_and_state);
+
+    /**
+     * @brief Callback for static objects
+     *
+     * @param static_objects_msg Static objects message
+     */
+    void StaticObjectsCallback(
+        const octomap_msgs::Octomap::ConstPtr& static_objects_msg);
+
+    /**
+     * @brief Callback for dynamic objects
+     *
+     * @param dynamic_object_shape_and_state Dynamic object shape and state
+     * message
+     */
+    void DynamicObjectShapesAndStatesCallback(
+        const mrnav::DynamicObjectShapeState::ConstPtr&
+            dynamic_object_shape_and_state);
 };
-}
+}  // namespace rotors_control
 
-#endif // ROTORS_CONTROL_LEE_POSITION_CONTROLLER_NODE_H
+#endif  // ROTORS_CONTROL_LEE_POSITION_CONTROLLER_NODE_H

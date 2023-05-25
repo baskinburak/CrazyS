@@ -60,10 +60,46 @@ class LeePositionControllerParameters {
 
 class LeePositionController {
    public:
+    using SBC = sbc::NominalSBC<double, 3U>;
+    using NeighborRobotDescription = typename SBC::NeighborRobotDescription;
+    using NeighborObstacleDescription =
+        typename SBC::NeighborObstacleDescription;
+    using VectorDIM = math::VectorDIM<double, 3U>;
+
     LeePositionController();
     ~LeePositionController();
     void InitializeParameters();
-    void CalculateRotorVelocities(Eigen::VectorXd* rotor_velocities) const;
+    void CalculateRotorVelocities(Eigen::VectorXd* rotor_velocities);
+
+    /**
+     * @brief Enable SBC safety module
+     *
+     * @param maximum_Linf_velocity Maximum Linf velocity
+     * @param maximum_Linf_acceleration Maximum Linf acceleration
+     * @param aggressiveness Aggressiveness parameter of SBC
+     * @param radius Radius of the ego robot
+     * @param replanning_period Replanning period of SBC, i.e., the time period
+     * between consecutive calls to SBC
+     *
+     * @return true if enable operation succeeds, false otherwise
+     */
+    bool EnableSBC(double maximum_Linf_velocity,
+                   double maximum_Linf_acceleration, double aggressiveness,
+                   double radius, double replanning_period);
+
+    /**
+     * @brief Set neighbor descriptions for the SBC safety module
+     *
+     * @details Should be updated as the neighbor states change
+     *
+     * @param neighbor_robot_descriptions Neighbor robot descriptions
+     * @param neighbor_obstacle_descriptions Neighbor obstacle descriptions
+     */
+    void SetSBCNeighborDescriptions(
+        const std::vector<NeighborRobotDescription>&
+            neighbor_robot_descriptions,
+        const std::vector<NeighborObstacleDescription>&
+            neighbor_obstacle_descriptions);
 
     void SetOdometry(const EigenOdometry& odometry);
     void SetTrajectoryPoint(
@@ -87,12 +123,22 @@ class LeePositionController {
     // Enable sbc module
     bool enable_sbc_;
 
+    // Last safe acceleration computed by SBC
+    VectorDIM last_safe_acceleration_;
+
+    // Neighbor robot descriptions
+    std::vector<NeighborRobotDescription> neighbor_robot_descriptions_;
+
+    // Neighbor obstacle descriptions
+    std::vector<NeighborObstacleDescription> neighbor_obstacle_descriptions_;
+
     // Nominal SBC module
-    sbc::NominalSBC<double, 3U> sbc_;
+    std::shared_ptr<SBC> sbc_;
 
     void ComputeDesiredAngularAcc(const Eigen::Vector3d& acceleration,
                                   Eigen::Vector3d* angular_acceleration) const;
     void ComputeDesiredAcceleration(Eigen::Vector3d* acceleration) const;
+    void MakeAccelerationSafe(Eigen::Vector3d* acceleration);
 };
 }  // namespace rotors_control
 
