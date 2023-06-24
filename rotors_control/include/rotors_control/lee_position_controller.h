@@ -65,6 +65,7 @@ class LeePositionController {
     using NeighborObstacleDescription =
         typename SBC::NeighborObstacleDescription;
     using VectorDIM = math::VectorDIM<double, 3U>;
+    using AlignedBox = math::AlignedBox<double, 3U>;
 
     LeePositionController();
     ~LeePositionController();

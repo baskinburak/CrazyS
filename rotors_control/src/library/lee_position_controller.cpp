@@ -20,6 +20,8 @@
 
 #include "rotors_control/lee_position_controller.h"
 
+#include <limits>
+
 namespace rotors_control {
 
 LeePositionController::LeePositionController()
@@ -197,9 +199,16 @@ void LeePositionController::MakeAccelerationSafe(
     //         << ", neighbor_robot_description.radius:"
     //         << neighbor_robot_description.radius << std::endl;
     // }
-    absl::StatusOr<Eigen::Vector3d> safe_acceleration_status_or =
-        sbc_->plan(*acceleration, self_state, neighbor_robot_descriptions_,
-                   neighbor_obstacle_descriptions_);
+
+    static const VectorDIM floor_constraint{
+        std::numeric_limits<double>::lowest(),
+        std::numeric_limits<double>::lowest(), 0.0};
+
+    absl::StatusOr<Eigen::Vector3d> safe_acceleration_status_or = sbc_->plan(
+        *acceleration, self_state, neighbor_robot_descriptions_,
+        neighbor_obstacle_descriptions_,
+        AlignedBox{floor_constraint,
+                   VectorDIM::Constant(std::numeric_limits<double>::max())});
 
     if (!safe_acceleration_status_or.ok()) {
         *acceleration = last_safe_acceleration_;
